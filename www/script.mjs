@@ -157,7 +157,6 @@ const lazy_image_div = image => {
   }
 }
 
-
 const make_grid = (
   {width, height, x_keys, y_keys, x_title, y_title, grid},
   get_image_div
@@ -203,7 +202,7 @@ const make_grid = (
   return table
 }
 
-const HistoryCache = (history_json={}) => {
+const HistoryCache = (history_json = {}) => {
   //validate and unpack history entry
   const parse_hist = (id, gen) => {
     const is_valid =
@@ -255,7 +254,7 @@ const HistoryCache = (history_json={}) => {
   const latest = () => get(keys.at(-1)) || {}
 
   //merge in a new history_json without ovewriting old data
-  //TODO check whether there can be partial history entries 
+  //TODO check whether there can be partial history entries
   //that may later be completed, if true this needs to take that into account
   const push = history_json =>
     Object.entries(history_json).forEach(([k, v]) =>
@@ -265,62 +264,52 @@ const HistoryCache = (history_json={}) => {
   //looks through history starting at start_key to find axes of change
   const get_axes = (start_key, max_axes = 2) => {
     //clone keys so we can pop without ruining state
-    let keys_ = structuredClone(keys)
-    if (start_key) {
-      const start = keys_.indexOf(start_key)
-      keys_ = keys_.slice(0, start + 1)
-    }
+    const keys_ = [...keys]
+      .slice(0, start_key ? keys.indexOf(start_key) : undefined)
+      .reverse()
     if (keys_.length < 2) return
 
     //the latest gen is the baseline to compare to
-    let hist_ids = [keys_.pop()]
-    let hist_id = hist_ids.at(-1)
-    const base = new Map(get(hist_id).workflow.nodes.map(n => [n.id, n]))
+    let hist_ids = []
+    const base = new Map(get(keys_[0]).workflow.nodes.map(n => [n.id, n]))
     const axes = new Map()
 
     //TODO the control flow here is kinda iffy lol
     let breakloop = false
     //TODO the way this works is efficient for the limited usecase of immediate past gens
     //there are situations where you would want to include gens in the discontinous past in the current grid
-    for (; keys_.length; ) {
-      const wflow = get(hist_id).workflow
-      try {
-        const {nodes} = wflow
-        nodes.forEach(n => {
-          const {id: node_id, widgets_values: vals, mode, type} = n
-          //TODO this isn't actually right, we need to handle bypassed nodes differently
-          if (mode !== 0) return
-          const ref = base.get(node_id).widgets_values
-          //potential new axes found
-          //we have to batch the axes because a single node can expand the number of axes past the limit
-          const additional_axes = ref
-            ?.map((r, widg_id) => {
-              const v = vals[widg_id]
-              if (JSON.stringify(r) !== JSON.stringify(v)) {
-                const axis_id = `${node_id}:${widg_id}`
-                if (!axes.get(axis_id)) {
-                  return [axis_id, {node_id, widg_id, type}]
-                }
+    for (const key of keys_) {
+      get(key)?.workflow?.nodes?.forEach(n => {
+        const {id: node_id, widgets_values: vals, mode, type} = n
+        //TODO this isn't actually right, we need to handle bypassed nodes differently
+        if (mode !== 0) return
+        const ref = base.get(node_id).widgets_values
+        //potential new axes found
+        //we have to batch the axes because a single node can expand the number of axes past the limit
+        const additional_axes = ref
+          ?.map((r, widg_id) => {
+            const v = vals[widg_id]
+            if (JSON.stringify(r) !== JSON.stringify(v)) {
+              const axis_id = `${node_id}:${widg_id}`
+              if (!axes.get(axis_id)) {
+                return [axis_id, {node_id, widg_id, type}]
               }
-            })
-            .filter(a => a)
+            }
+          })
+          .filter(a => a)
 
-          //in that case we just break the loop and end the search
-          if (!additional_axes || !additional_axes.length) {
-          } else if (axes.size + additional_axes.length <= max_axes) {
-            additional_axes.forEach(([axis_id, info]) => {
-              axes.set(axis_id, info)
-            })
-          } else {
-            breakloop = true
-          }
-        })
-      } catch (e) {
-        console.warn(e)
-      }
+        //in that case we just break the loop and end the search
+        if (!additional_axes || !additional_axes.length) {
+        } else if (axes.size + additional_axes.length <= max_axes) {
+          additional_axes.forEach(([axis_id, info]) => {
+            axes.set(axis_id, info)
+          })
+        } else {
+          breakloop = true
+        }
+      })
       if (breakloop) break
-      hist_id = keys_.pop()
-      hist_ids.push(hist_id)
+      hist_ids.push(key)
     }
 
     axes.forEach(axis => {
@@ -472,7 +461,7 @@ const main = async ws => {
         image_to_favicon(url)
         div.classList.add("imag")
         const name = node_info.title || node_info.type
-        div.innerText = name+ ':' + image.id
+        div.innerText = name + ":" + image.id
         root.appendChild(div)
       }
     } else if (intent.focus && intent.view_mode === "grid") {
