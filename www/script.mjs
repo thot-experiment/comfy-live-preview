@@ -30,8 +30,6 @@ const hash_text = (bytes => {
         })(string)
 })(4)
 
-let current_image_index = 0
-let current_history_index = 0
 let images = []
 
 const zip = (...arrays) =>
@@ -98,10 +96,6 @@ const compare_workflows = workflows => {
 
   return changed_nodes
 }
-//hist = await fetch('/history').then(a => a.json())
-//node_info = await fetch('/api/object_info').then(a => a.json())
-//cw = compare_workflows((Object.values(hist).map(a => parse_gen(a).workflow)))
-//p = parse_gen(Object.values(hist)[3])
 
 const image_url = image => {
   const req = Object.entries(image)
@@ -109,16 +103,6 @@ const image_url = image => {
     .map(a => a.join("="))
     .join("&")
   return `http://${URL}/view?${req}`
-}
-
-const display_image = async () => {
-  //console.log("dispi")
-  //console.log(images[current_history_index])
-  const img = images[current_image_index]
-  const {url, div} = img
-  image_to_favicon(url)
-  root.innerHTML = ""
-  root.appendChild(div)
 }
 
 const handle_key_press = event => {
@@ -131,6 +115,9 @@ const handle_key_press = event => {
     intent.move_history = 1
   } else if (event.key === "ArrowDown") {
     intent.move_history = -1
+  } else if (event.key === "F") {
+    intent.view_mode = "grid"
+    intent.grid_mode = intent.grid_mode === undefined?0:intent.grid_mode+1
   } else if (event.key === "f") {
     intent.view_mode = intent.view_mode === "fullscreen" ? "grid" : "fullscreen"
   } else if (event.key === "Escape") {
@@ -176,8 +163,13 @@ const make_grid = (
 
       if (v) {
         const url = get_image_div(v)
+        /*
         td.style.background = `url(${url}) no-repeat center center`
         td.style.backgroundSize = `contain`
+        */
+        const img = document.createElement('img')
+        img.src = url
+        td.appendChild(img)
       }
       return td
     }
@@ -265,7 +257,7 @@ const HistoryCache = (history_json = {}) => {
   const get_axes = (start_key, max_axes = 2) => {
     //clone keys so we can pop without ruining state
     const keys_ = [...keys]
-      .slice(0, start_key ? keys.indexOf(start_key) : undefined)
+      .slice(0, start_key ? keys.indexOf(start_key)+1 : undefined)
       .reverse()
     if (keys_.length < 2) return
 
@@ -289,6 +281,7 @@ const HistoryCache = (history_json = {}) => {
         const additional_axes = ref
           ?.map((r, widg_id) => {
             const v = vals[widg_id]
+            //TODO deep comparing in JS sucks, idk if this is fast
             if (JSON.stringify(r) !== JSON.stringify(v)) {
               const axis_id = `${node_id}:${widg_id}`
               if (!axes.get(axis_id)) {
@@ -298,19 +291,23 @@ const HistoryCache = (history_json = {}) => {
           })
           .filter(a => a)
 
-        //in that case we just break the loop and end the search
         if (!additional_axes || !additional_axes.length) {
+          //next loop if no axes found in the node
         } else if (axes.size + additional_axes.length <= max_axes) {
+          //if we can fit additional axes add them to the map
           additional_axes.forEach(([axis_id, info]) => {
             axes.set(axis_id, info)
           })
         } else {
+          //too many axes, break the loop
           breakloop = true
         }
       })
       if (breakloop) break
       hist_ids.push(key)
     }
+
+    hist_ids.reverse()
 
     axes.forEach(axis => {
       axis.history = hist_ids.map(id => {
@@ -434,6 +431,8 @@ const main = async ws => {
         intent.view_mode = "fullscreen"
       }
     }
+
+    if (intent.grid_mode) intent.grid_mode = intent.grid_mode%2
   }
 
   const render_intent = async intent => {
@@ -477,6 +476,7 @@ const main = async ws => {
       })
 
       if (div) {
+        if (intent.grid_mode == 1) div.classList.add('big-grid')
         root.appendChild(div)
       }
       /*
